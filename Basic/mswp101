@@ -1,0 +1,661 @@
+100 REMark -------------------------------
+110 REMark   M I N E S W E E P E R  2025
+120 REMark -------------------------------
+130 REMark       Sinclair QL Version
+140 REMark         needs Tookit II
+150 REMark 
+160 REMark             by
+170 REMark         Hubert Surrer
+180 REMark            v1.01
+190 REMark 
+200 REMark 
+300 REMark ------------------------------
+301 REMark splash screen
+302 REMark ------------------------------
+305 CLEAR
+306 WINDOW 512,256,0,0:CSIZE 2,1:PAPER 2: INK 7:CLS
+307 AT 2,19:PRINT "STARTING"
+308 AT 4,13:PRINT "QL MINESWEEPER 2025"
+309 AT 6,14:PRINT "copyright   2025"
+310 AT 8,13:PRINT "WARTHOG PRODUCTIONS"
+311 AT 10,14:FLASH 1:PRINT " Please wait ... ":FLASH 0
+312 TK2_EXT
+321 REMark 
+500 REMark ------------------------------
+502 REMark Init User defined Graphics
+503 REMark ------------------------------
+510   UDGstart=144
+520   initUDG UDGstart
+1100 REMark ------------------------------
+1110 REMark Constants
+1120 REMark ------------------------------
+1130 REMark -- for grid g() --------------
+1140   empty=0
+1150   bomb=9
+1160 REMark 
+1170 REMark -- for playground g()---------
+1180   opened=0
+1190   hidden=10
+1200   hiddenFlag=11
+1210   hiddenQm=12
+1220   h$=FILL$(CHR$(UDGstart+hidden),84): REMark Hidden fields
+1225   DIM l$(84) : REMark leerzeichen
+1260 REMark -- for end -------------------
+1270   youPlay=0
+1280   youWin=1
+1290   youLose=2
+1300   youExit=3
+1310   YouRetry=4
+1320   youRestart=5
+1330 REMark -- keys ----------------------
+1340   maxKeys=8
+1350   DIM k$(maxKeys)
+1360   kLeft=1   : kRight=2
+1370   kUp=3     : kDown=4
+1380   kOpen=5   : kFlag=6
+1390   kQM=7     : kExit=8
+1400   RESTORE 1450
+1410   FOR i=1 TO maxKeys
+1420     READ k
+1430     k$(i)=CHR$(k)
+1440   END FOR i
+1450   DATA 192,200,208,216,111,102,63,120
+1460 REMark -- Colors --------------------
+1470   black=0: blue=1: red=2
+1480   magenta=3: green=4: cyan=5
+1490   yellow=6: white=7
+1500   DIM pa(13): DIM in(13)
+1510   RESTORE 1550
+1520   FOR i=0 TO 12
+1530     READ pa(i), in(i)
+1540   END FOR i
+1550   DATA white, black, white, blue, white, green, white, red, white, blue, white, magenta, white, yellow, white, black, white, red, white, red
+1560   DATA cyan, black, cyan, red, cyan, black
+1700 REMark ------------------------------
+1710 REMark Init Variables
+1720 REMark ------------------------------
+1730   action=0 : REMark what key next?
+1740   sec0=0   : REMark seconds at start
+1770   ende=youPlay
+1780   bombsFound=0
+1790   flaggedFields=0
+1995 REMark 
+2000 REMark -----------------------------
+2001 REPeat main
+2002 REMark -----------------------------
+2010   REMark 
+2020   setup
+2030   REMark 
+2040   REMark ----------------------------
+2050   REPeat try
+2060   REMark ----------------------------
+2070     initGrid
+2080     paintPlGrnd
+2090     highlight
+2100     sec0=DATE
+2110     ende=youPlay
+2120     REMark --------------------------
+2130     REPeat playLoop
+2140     REMark --------------------------
+2160       act keypressed
+2170       IF ende<>youPlay THEN EXIT playLoop
+2180     REMark --------------------------
+2190     END REPeat playLoop
+2200     REMark --------------------------
+2210     IF ende=youWin THEN endMsg "Well done", "You win !", green, blue, red, black
+2220     IF ende=youLose THEN endMsg "*** BOOM ***", "You lose", red, blue, red, black
+2230     IF ende=youExit THEN endMsg "ok then ...", "Bey !", green, blue, white, red
+2240     ende=playAgain
+2250     IF ende<>YouRetry THEN EXIT try
+2260   END REPeat try
+2270   IF ende<>youRestart THEN EXIT main
+2280 END REPeat main
+2290 IF ende=youExit THEN CLS: PRINT "Thanks for playing. Bey."
+2499 STOP
+2500 REMark ------------------------------
+2503 DEFine PROCedure initGrid
+2506 REMark ------------------------------
+2507   PAPER black: INK green
+2509   CLS
+2512   REMark 
+2515   REMark Cursor x/y------------------
+2518   REMark 
+2521   cx=INT(dimX/2)
+2524   cy=INT(dimY/2)
+2527   REMark 
+2530   REMark x0/y0 Ursprung--------------
+2533   REMark 
+2536   x0=INT((resX-dimX)/2)-1
+2539   y0=INT((resY-dimY)/2)
+2542   REMark 
+2546   AT resY-1,(resX-20)/2
+2547   PRINT " Preparing minefield "
+2548   REMark ----------------------------
+2551   REMark p() Playground
+2554   REMark g() Grid
+2557   REMark b() BombList
+2560   REMark ----------------------------
+2563   DIM p(dimX,dimY)
+2566   DIM g(dimX,dimY)
+2569   DIM b(dimBomb,2)
+2600   REMark ----------------------------
+2605   REMark set bombs
+2610   REMark and calcualte distances
+2615   REMark ----------------------------
+2617   bombsFound=0
+2618   flaggedFields=0
+2620   RANDOMISE
+2625   FOR i=1 TO dimBomb
+2630     AT 3+RND*(resY-5),2+RND*(resX-4)
+2635     PRINT CHR$(UDGstart+bomb)
+2640     REPeat newBomb
+2645       x=INT(RND*dimX)+1
+2650       y=INT(RND*dimY)+1
+2655       IF g(x,y)<>bomb THEN EXIT newBomb
+2660       REMark leeren platz gefunden
+2665     END REPeat newBomb
+2670     g(x,y)=bomb
+2675     b(i,1)=x
+2680     b(i,2)=y
+2700     REMark --------------------------
+2705     REMark increment dist-counter
+2710     REMark --------------------------
+2715     FOR u=x-1 TO x+1
+2720       FOR v=y-1 TO y+1
+2725         IF u<1 OR u>dimX THEN GO TO 2750
+2730         IF v<1 OR v>dimY THEN GO TO 2745
+2735         IF g(u,v)=bomb THEN GO TO 2745
+2740         g(u,v)=g(u,v)+1
+2745       END FOR v
+2750     END FOR u
+2755   END FOR i
+2800   REMark ----------------------------
+2810   REMark initPlayground hidden
+2815   REMark p(x,y)=hidden
+2817   REMark --> moved to paintPlayGnd
+2818   REMark due to performance
+2820   REMark ----------------------------
+2999 END DEFine 
+3000 REMark -----------------------------
+3005 DEFine PROCedure initUDG (chstart)
+3010 REMark -----------------------------
+3015   LOCal b,space, chanz
+3020   chanz=14
+3025   space=RESPR(2+chanz*9)
+3030   POKE space,chstart
+3035   POKE space+1,chanz
+3040   RESTORE 3100
+3045   FOR i=space+2 TO space+1+chanz*9
+3050     READ b
+3055     POKE i,b
+3060   END FOR i
+3065   CHAR_USE 0,space
+3070   REMark -----------------------
+3075   REMark 3100 - 3108: blank - 8
+3080   REMark 3109: bomb
+3085   REMark 3110: hidden
+3090   REMark 3111: flag
+3095   REMark 3112: ?
+3096   REMark 3113: Flash-Block
+3098   REMark ------------------------
+3100   DATA 0,0,0,0,0,0,0,0,0
+3101   DATA 0,48,112,48,48,48,48,120,0
+3102   DATA 0,120,204,12,56,96,204,252,0
+3103   DATA 0,112,140,12,48,12,140,112,0
+3104   DATA 0,88,88,88,152,252,24,24,0
+3105   DATA 0,252,192,248,12,204,204,112,0
+3106   DATA 0,120,128,128,248,204,204,120,0
+3107   DATA 0,252,12,28,56,96,64,64,0
+3108   DATA 0,120,204,204,120,204,204,120,0
+3109   DATA 16,180,120,188,252,120,180,40,0
+3110   DATA 0,4,4,4,4,4,4,4,124
+3111   DATA 0,20,52,116,244,20,20,4,124
+3112   DATA 32,84,84,20,36,4,36,4,124
+3113   DATA 0,252,0,252,0,252,0,252,0
+3170 END DEFine 
+3500 REMark ------------------------------
+3501 DEFine PROCedure paint
+3502 REMark ------------------------------
+3506   LOCal c
+3510   IF p(x,y)>=hidden THEN 
+3520     c=p(x,y)
+3530   ELSE 
+3540     c=g(x,y)
+3550   END IF 
+3560   PAPER pa(c):INK in(c)
+3570   AT y0+y,x0+x:PRINT CHR$(UDGstart+c)
+3580 END DEFine 
+3800 REMark ------------------------------
+3810 DEFine PROCedure highlight
+3820 REMark ------------------------------
+3825   LOCal c
+3835   IF p(cx,cy)>=hidden THEN 
+3837     c=p(cx,cy)
+3838   ELSE 
+3839     c=g(cx,cy)
+3840   END IF 
+3850   AT y0+cy,x0+cx
+3859   FLASH 1: PAPER black:INK cyan
+3860   PRINT CHR$(UDGstart+c): REMark block
+3870   FLASH 0
+3900 END DEFine 
+4000 REMark ------------------------------
+4010 DEFine PROCedure paintPlGrnd
+4020 REMark ------------------------------
+4030   PAPER yellow
+4040   CLS
+4060   REMark ----------------------------
+4070   REMark Rahmen
+4080   REMark ----------------------------
+4090   PAPER black,red
+4100   FOR i=-3 TO dimY+1-csizeY
+4110     AT y0+csizeY+i,x0: PRINT " "
+4115     AT y0+csizeY+i,x0+dimX+1:PRINT " "
+4120   NEXT i
+4130   AT y0-3+csizeY,x0+1:PRINT l$(1 TO dimX)
+4135   AT y0,x0+1:  PRINT l$(1 TO dimX)
+4140   AT y0+dimY+1,x0+1:PRINT l$(1 TO dimX);
+4150   REMark ----------------------------
+4151   REMark Kopfzeile
+4152   REMark ----------------------------
+4156   CSIZE csizeX,0
+4160   FOR i=0 TO 1
+4170     PAPER black: INK red
+4172     AT y0*(csizeY+1)-1-i,x0+1
+4174     PRINT l$(1 TO dimX);
+4176   NEXT i
+4180   AT y0*(csizeY+1)-2,x0+1
+4181   PAPER black: INK red
+4182   PRINT "BOMB"
+4190   AT y0*(csizeY+1)-2,x0+dimX-3
+4192   PRINT "TIME"
+4196   CSIZE csizeX,csizeY
+4197   bombcounter
+4200   REMark ----------------------------
+4210   REMark Playground
+4220   REMark ----------------------------
+4225   PAPER cyan: INK black
+4230   FOR y=1 TO dimY
+4240   FOR x=1 TO dimX
+4245     p(x,y)=hidden
+4247   NEXT x
+4250     AT y0+y,x0+1
+4260     PRINT h$(1 TO dimX)
+4270   END FOR y
+4280 END DEFine 
+4500 REMark ------------------------------
+4501 DEFine FuNction keypressed
+4502 REMark ------------------------------
+4512   LOCal key
+4517   REPeat getkey
+4522     LET a$=INKEY$
+4527     timer
+4529     FOR i=1 TO maxKeys
+4530       IF k$(i)=a$ THEN RETurn i
+4531     END FOR i
+4542   END REPeat getkey
+4552 END DEFine 
+4700 REMark ------------------------------
+4701 DEFine PROCedure timer
+4702 REMark ------------------------------
+4707   CSIZE csizeX,0
+4712   AT y0*(csizeY+1)-1,x0+dimX-3
+4722   PAPER black: INK red
+4732   PRINT DATE-sec0
+4737   CSIZE csizeX,csizeY
+4742 END DEFine 
+4800 REMark ------------------------------
+4802 DEFine PROCedure bombcounter
+4812 REMark ------------------------------
+4817   CSIZE csizeX,0
+4822   AT y0*(csizeY+1)-1, x0+1
+4832   PAPER black: INK red
+4842   PRINT  dimBomb-flaggedFields;' '
+4847   CSIZE csizeX,csizeY
+4852 END DEFine 
+5000 REMark ------------------------------
+5002 DEFine PROCedure act (action)
+5004 REMark ------------------------------
+5010   x=cx : REMark save coordinates
+5020   y=cy
+5030   IF action=kLeft THEN aLeft
+5040   IF action=kRight THEN aRight
+5050   IF action=kUp THEN aUp
+5060   IF action=kDown THEN aDown
+5070   IF action=kFlag THEN aFlag
+5075   IF action=kQM THEN aQM
+5077   IF action=kOpen THEN aOpen x,y
+5078   IF action=kExit THEN ende=youExit
+5080   paint
+5090   highlight
+5290 END DEFine 
+5300 REMark 
+5310 DEFine PROCedure aLeft
+5320 REMark ------------------------------
+5330   IF cx<2 THEN RETurn 
+5350   cx=cx-1
+5360 END DEFine 
+5400 REMark 
+5410 DEFine PROCedure aRight
+5420 REMark ------------------------------
+5430   IF cx>dimX-1 THEN RETurn 
+5440   cx=cx+1
+5450 END DEFine 
+5500 REMark 
+5510 DEFine PROCedure aUp
+5520 REMark ------------------------------
+5530   IF cy<2 THEN RETurn 
+5540   cy=cy-1
+5550 END DEFine 
+5600 REMark 
+5610 DEFine PROCedure aDown
+5620 REMark ------------------------------
+5630   IF cy>dimY-1 THEN RETurn 
+5640   cy=cy+1
+5650 END DEFine 
+5700 REMark 
+5702 DEFine PROCedure aFlag
+5703 REMark ------------------------------
+5705   IF p(x,y)=opened THEN RETurn 
+5707   REMark flaggedfields--
+5708   REMark falls da ein flag war
+5709   REMark bombsfound--
+5710   REMark falls da eine bombe war
+5711   REMark ......................
+5714   IF p(x,y)=hiddenFlag THEN 
+5716     flaggedFields=flaggedFields-1
+5718     IF g(x,y)=bomb THEN 
+5720       bombsFound=bombsFound-1
+5722     END IF 
+5724   END IF 
+5726   p(x,y)=p(x,y)+1
+5727   REMark falls jetzt ein flag
+5728   REMark flaggedfields++
+5729   REMark und bombsfound++ (in case)
+5730   REMark ...........................
+5732   IF p(x,y)=hiddenFlag THEN 
+5734     flaggedFields=flaggedFields+1
+5736     IF g(x,y)=bomb THEN 
+5738       bombsFound=bombsFound+1
+5740     END IF 
+5742   END IF 
+5744   IF p(x,y)>hiddenQm THEN 
+5746     p(x,y)=hidden
+5748   END IF 
+5750   REMark 
+5752   REMark Check, ob alle gefunden
+5754   REMark ............................
+5756   IF dimBomb=bombsFound AND bombsFound=flaggedFields THEN ende=youWin
+5758   bombcounter
+5766 END DEFine 
+5850 REMark 
+5852 DEFine PROCedure aQM
+5854 REMark ------------------------------
+5860   IF p(x,y)=opened THEN RETurn 
+5870   IF p(x,y)=hidden OR p(x,y)=hiddenFlag THEN 
+5875     p(x,y)=hiddenQm
+5877   ELSE 
+5880     p(x,y)=hidden
+5885   END IF 
+5890 END DEFine 
+6000 REMark 
+6010 DEFine PROCedure aOpen (x,y)
+6020 REMark ------------------------------
+6023   REMark Abbruchbedingung
+6024   IF p(x,y)=opened THEN RETurn 
+6025   timer
+6030   IF p(x,y)=hiddenFlag THEN 
+6040     flaggedFields=flaggedFields-1
+6050     bombcounter
+6060   END IF 
+6070   p(x,y)=opened
+6080   paint
+6090   REMark 
+6100   REMark Fall 1 - Bombe gefunden
+6110   REMark ........................
+6120   IF g(x,y)=bomb THEN 
+6130     ende=youLose
+6140     RETurn 
+6150   END IF 
+6160   REMark 
+6170   REMark Fall 2 - Zahl gefunden
+6180   REMark ......................
+6190   IF g(x,y)<>empty THEN RETurn 
+6200   REMark 
+6210   REMark Fall 3 - floodfill
+6215   REMark          rekursion
+6220   REMark ..................
+6300   IF x>1    THEN aOpen x-1, y
+6305   IF x<dimX THEN aOpen x+1, y
+6307   IF y>1    THEN aOpen x,y-1
+6308   IF y<dimY THEN aOpen x,y+1
+6310 END DEFine 
+7400 REMark ------------------------------
+7410 DEFine PROCedure endMsg (title$, subtitle$, ptitle, iTitle, pBomb, iBomb)
+7420 REMark ------------------------------
+7425   FLASH 0
+7430   INK iTitle: PAPER ptitle
+7440   AT y0,x0     :PRINT l$(1 TO dimX+2)
+7450   AT y0+dimY+1,x0:PRINT l$(1 TO dimX+2)
+7460   AT y0,x0+1+(dimX-LEN(title$))/2
+7470   PRINT title$
+7480   AT y0+dimY+1,x0+1+(dimX-LEN(subtitle$))/2
+7490   PRINT subtitle$
+7495   PAPER pBomb
+7500   FOR i=1 TO dimBomb
+7505     IF p(b(i,1),b(i,2))=hiddenFlag THEN 
+7507       INK green
+7508     ELSE 
+7509       INK iBomb
+7510     END IF 
+7520     AT y0+b(i,2),x0+b(i,1)
+7530     PRINT CHR$(UDGstart+bomb)
+7540   NEXT i
+7550 RETurn 
+7700 REMark ------------------------------
+7710 DEFine FuNction playAgain
+7720 REMark ------------------------------
+7730   CSIZE 2,0
+7740   PAPER black: INK green
+7750   FOR i=1 TO 23
+7760     AT i,0:PRINT " ";
+7770     AT i,41: PRINT " ";
+7780   NEXT i
+7790   AT 0,0: PRINT l$(1 TO 42);
+7800   AT 24,0: PRINT l$(1 TO 42);
+7805   AT 24,4:PRINT "Same Grid   Another Grid    Nope.";
+7810   PAPER green: INK black
+7820   AT 24,4:PRINT "S"
+7830   AT 24,16:PRINT "A"
+7840   AT 24,32:PRINT "N"
+7845   PAPER black: INK green
+7860   AT 0,9:PRINT "P L A Y    A G A I N ? ? ?"
+7870   CSIZE csizeX,csizeY
+7880   REPeat taste
+7890     a$=INKEY$
+7900     IF a$="s" OR a$="S" THEN RETurn YouRetry
+7910     IF a$="a" OR a$="A" THEN RETurn youRestart
+7920     IF a$="n" OR a$="N" THEN RETurn youExit
+7925   END REPeat taste
+7930 RETurn 
+8000 REMark ------------------------------
+8004 DEFine PROCedure setup
+8008 REMark ------------------------------
+8012 REMark 
+8016 REMark init dimensions
+8020 REMark 
+8024   dimX=12  : dimY=5
+8028   dimBomb = 8
+8032   dimColors=8
+8036   compression=1 : REMark compression 2=schmal
+8040   minX=8   : minY=4
+8044   maxX=80  : maxY=19
+8048   REMark 8 Farben, 42 Zeichen/Zeile
+8052   MODE 8:CSIZE 2,0
+8056   REMark -------------
+8060   WINDOW #1,512,255,0,0
+8064   PAPER yellow: INK black: CLS
+8065   SCALE 255,0,0
+8068   LINE 27,15 TO 27,216
+8072   LINE 355,15 TO 355,216
+8076   PAPER black: INK green
+8084   AT 1,3:PRINT "                                     "
+8088   AT 2,3:PRINT "  M I N E S W E E P E R    2 0 2 5   "
+8092   AT 3,3:PRINT "                                     "
+8096   AT 24,3:PRINT "        S T A R T   G A M E          "
+8100   PAPER green: INK black
+8104   AT 24,23:PRINT "G": REMark GAME
+8108   PAPER black: INK cyan
+8112   AT 5,5: PRINT " SELECT GRID "
+8116   AT 5,24:PRINT " SIZE        "
+8120   AT 11,5:PRINT " KEYS                           "
+8124   AT 21,5: PRINT " COLORS                "
+8128   PAPER yellow: INK black
+8132   AT 5,20: PRINT "or"
+8136   AT 6,8: PRINT "mall"
+8140   AT 7,8: PRINT "edium"
+8144   AT 8,8: PRINT "arge"
+8148   AT 9,8: PRINT "-Tra Large"
+8152   AT 6,26: PRINT "X......"
+8156   AT 7,26: PRINT "Y......"
+8160   AT 8,26: PRINT "Bombs.."
+8164   AT 12,8: PRINT "Left.........<cursor left>"
+8168   AT 13,8: PRINT "Right........<cursor right>"
+8172   AT 14,8: PRINT "Up...........<cursor up>"
+8176   AT 15,8: PRINT "Down.........<cursor down>"
+8180   AT 16,8: PRINT "Open field... o"
+8184   AT 17,8: PRINT "Flag/unflag.. f"
+8188   AT 18,8: PRINT "Mark with ?.. ?"
+8192   AT 19,8: PRINT "Exit......... x"
+8196   PAPER cyan: INK black
+8200   AT 5,27: PRINT "Z": REMark size
+8204   AT 6,7:  PRINT "S": REMark small
+8208   AT 7,7:  PRINT "M": REMark medium
+8212   AT 8,7:  PRINT "L": REMark large
+8216   AT 9,7:  PRINT "X": REMark x-tra l
+8220   AT 21,6: PRINT "C": REMark color
+8224 REMark ..............................
+8228   printDimensions
+8232   printColors
+8236 REMark .........................
+8240   REPeat userInput
+8244     a$=INKEY$
+8248     IF a$="" THEN GO TO 8244
+8252     IF a$="z" OR a$="Z" OR a$="y" OR a$="Y" THEN newSize
+8256     IF a$="c" OR a$="C" THEN 
+8260       IF dimColors=4 AND dimX<=38 THEN 
+8264         dimColors=8
+8268       ELSE 
+8272         dimColors=4
+8276       END IF 
+8280       printColors
+8284     END IF 
+8288     IF a$="s" OR a$="S" THEN dimX=12:dimY=5:dimBomb=8:printDimensions
+8292     IF a$="m" OR a$="M" THEN dimX=20:dimY=8:dimBomb=20:printDimensions
+8296     IF a$="l" OR a$="L" THEN dimX=30:dimY=16:dimBomb=40:printDimensions
+8300     IF a$="x" OR a$="X" THEN dimX=60:dimY=19:dimBomb=70:dimColors=4:printDimensions:printColors
+8304     IF a$="g" OR a$="G" THEN EXIT userInput
+8308   END REPeat userInput
+8312   MODE dimColors
+8316 REMark 
+8320   IF dimX<=30              THEN csizeX=3: resX=32
+8323   IF dimX> 30 AND dimX<=40 THEN csizeX=2: resX=42
+8326   IF dimX> 40 AND dimX<=62 THEN csizeX=1: resX=64
+8328   IF dimX> 62              THEN csizeX=0: resX=85
+8330 REMark 
+8331   IF dimY<= 8 THEN csizeY=1:resY=12
+8333   IF dimY>  8 THEN csizeY=0:resY=25
+8335 REMark 
+8337   CSIZE csizeX,csizeY
+8340   CLS
+8344 END DEFine 
+8400 REMark ------------------------------
+8410 DEFine PROCedure printDimensions
+8420 REMark ------------------------------
+8430   PAPER yellow: INK black
+8440   AT 6,33: PRINT dimX
+8450   AT 7,33: PRINT dimY
+8460   AT 8,33: PRINT dimBomb
+8470 END DEFine 
+8500 REMark ------------------------------
+8502 DEFine PROCedure printColors
+8505 REMark ------------------------------
+8510  AT 21,29
+8515  IF dimColors=4 THEN 
+8520    FOR i=0 TO 4 STEP 2
+8522       PAPER i
+8525       PRINT "  ";
+8530     NEXT i
+8535     PAPER 7: PRINT "  "
+8540   ELSE 
+8545     FOR i=0 TO 7
+8550       PAPER i
+8555       PRINT " ";
+8560     NEXT i
+8565   END IF 
+8570 END DEFine 
+8600 REMark ------------------------------
+8605 DEFine PROCedure newSize
+8610 REMark ------------------------------
+8620   dimX=lineEd (6,33,dimX,minX,maxX)
+8622   IF dimX>38 THEN dimColors=4:printColors
+8625   dimY=lineEd (7,33,dimY,minY,maxY)
+8627   dimBomb=lineEd (8,33,dimBomb,1,INT(dimX*dimY/2.5))
+8699 END DEFine 
+9000 REMark ------------------------------
+9010 DEFine FuNction lineEd (lin,col,val, min, max)
+9020 REMark ------------------------------
+9025   LOCal z$, pos
+9030   z$=val&'  '
+9035   pos=1
+9040   AT lin,col+pos-1
+9050   PAPER cyan: INK black: FLASH 1
+9060   PRINT z$(pos TO pos)
+9062 REMark 
+9063   REPeat keys
+9065     REMark getkey 0..9, Enter, TAB, LEFT
+9070     REPeat key
+9080       a$=INKEY$
+9090       IF (a$>="0" AND a$<="9") OR CODE(a$)=10 OR CODE(a$)=9 OR CODE(a$)=192 OR CODE(a$)=194 THEN EXIT key
+9100     END REPeat key
+9105 REMark 
+9107 REMark Number
+9108 REMark 
+9110     IF a$>="0" AND a$<="9" AND pos<3 THEN 
+9115       PAPER yellow: FLASH 0
+9116       AT lin,col+pos-1
+9117       PRINT a$;
+9118       z$(pos TO pos)=a$
+9119       pos=pos+1
+9120       PAPER cyan: FLASH 1
+9130       PRINT z$(pos TO pos);
+9140     END IF 
+9141 REMark 
+9142 REMark Enter/tab
+9143 REMark 
+9144     IF CODE(a$)=10 OR CODE(a$)=9 THEN 
+9149       IF pos=2 THEN z$=z$(1 TO 1)&" "
+9154       IF z$<min THEN z$=min
+9164       IF z$>max THEN z$=max
+9174       PAPER yellow: FLASH 0
+9184       AT lin,col
+9194       PRINT z$;" "
+9204       RETurn z$
+9214     END IF 
+9224 REMark 
+9234 REMark Backspace, left
+9244 REMark 
+9254     IF (CODE(a$)=192 OR CODE(a$)=194) AND pos>1 THEN 
+9264       PAPER yellow: FLASH 0
+9274       AT lin,col+pos-1
+9284       PRINT " "
+9294       pos=pos-1
+9304       PAPER cyan: FLASH 1
+9314       AT lin,col+pos-1
+9324       PRINT z$(pos TO pos)
+9329       z$=z$(1 TO pos)&"  "
+9334     END IF 
+9790   END REPeat keys
+9800 END DEFine 
+9998 MODE 4:CSIZE 0,0:WINDOW #2,512,208,0,0:BORDER #1,2
+9999 RETurn 
